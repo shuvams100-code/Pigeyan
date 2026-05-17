@@ -1,11 +1,51 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 
-export default function ChatInterface({ agencyId, activeSessionId, onSessionCreated, isExpanded }: any) {
+export default function ChatInterface({ 
+  agencyId, 
+  activeSessionId, 
+  onSessionCreated, 
+  isExpanded,
+  prefill,
+  clearPrefill
+}: any) {
   const [messages, setMessages] = useState<any[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  // Listen for prefill messages
+  useEffect(() => {
+    if (prefill && activeSessionId === 'temp_id') {
+      const msg = prefill.message
+      const title = prefill.title
+      if (clearPrefill) clearPrefill()
+      
+      setMessages([{ role: 'user', content: msg }])
+      setIsLoading(true)
+      
+      fetch('/api/loft/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg, agency_id: agencyId, title })
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.session_id) {
+            onSessionCreated(data.session_id)
+          }
+          if (data.reply) {
+            setMessages(prev => [...prev, { role: 'loft', content: data.reply }])
+          }
+        })
+        .catch(err => {
+          setMessages(prev => [...prev, { role: 'loft', content: 'Sorry, I encountered an error. Please try again.' }])
+        })
+        .finally(() => {
+          setIsLoading(false)
+        })
+    }
+  }, [prefill, activeSessionId, agencyId, onSessionCreated, clearPrefill])
 
   useEffect(() => {
     if (activeSessionId && activeSessionId !== 'temp_id') {

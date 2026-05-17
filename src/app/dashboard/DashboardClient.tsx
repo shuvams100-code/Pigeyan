@@ -4,36 +4,35 @@ import Sidebar from '@/components/layout/Sidebar'
 import TopBar from '@/components/layout/TopBar'
 import Greeting from '@/components/dashboard/Greeting'
 import ChatInterface from '@/components/dashboard/ChatInterface'
-import ActionItems from '@/components/dashboard/ActionItems'
+import WhatIsHappening from '@/components/dashboard/WhatIsHappening'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
 export default function DashboardClient({ user }: { user: any }) {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [sessions, setSessions] = useState<any[]>([])
   const [agencyId, setAgencyId] = useState<string | null>(null)
+  const [prefill, setPrefill] = useState<{ message: string; title: string } | null>(null)
   const supabase = createClientComponentClient()
 
   // Fetch real agency ID on mount
   useEffect(() => {
-    supabase.from('agencies')
-      .select('id')
-      .eq('email', user.email)
-      .single()
-      .then(({ data }) => {
-        if (data) setAgencyId(data.id)
+    fetch('/api/loft/agency')
+      .then(res => res.json())
+      .then(data => {
+        if (data.agency_id) setAgencyId(data.agency_id)
       })
-  }, [supabase, user.email])
+      .catch(err => console.error('Error loading agency:', err))
+  }, [])
 
-  // Fetch initial sessions
+  // Fetch initial sessions from server-side endpoint
   useEffect(() => {
-    supabase.from('chat_sessions')
-      .select('id, title, agency_id')
-      .order('created_at', { ascending: false })
-      .limit(20)
-      .then(({ data }) => {
-        if (data) setSessions(data)
+    fetch('/api/loft/sessions')
+      .then(res => res.json())
+      .then(data => {
+        if (data.sessions) setSessions(data.sessions)
       })
-  }, [supabase])
+      .catch(err => console.error('Error loading sessions:', err))
+  }, [])
 
   // Subscribe to Realtime changes for chat_sessions
   useEffect(() => {
@@ -94,15 +93,15 @@ export default function DashboardClient({ user }: { user: any }) {
             <ChatInterface 
               agencyId={agencyId || user.id} 
               activeSessionId={activeSessionId} 
+              prefill={prefill}
+              clearPrefill={() => setPrefill(null)}
               onSessionCreated={(id: string) => {
                 setActiveSessionId(id)
-                // Proactively refetch to bypass any replication delay
-                supabase.from('chat_sessions')
-                  .select('id, title, agency_id')
-                  .order('created_at', { ascending: false })
-                  .limit(20)
-                  .then(({ data }) => {
-                    if (data) setSessions(data)
+                // Proactively refetch sessions from the backend list
+                fetch('/api/loft/sessions')
+                  .then(res => res.json())
+                  .then(data => {
+                    if (data.sessions) setSessions(data.sessions)
                   })
               }}
               isExpanded={!!activeSessionId}
@@ -110,7 +109,12 @@ export default function DashboardClient({ user }: { user: any }) {
 
             {!activeSessionId && (
               <div className="w-full">
-                <ActionItems agencyId={user.id} />
+                <WhatIsHappening 
+                  onAskLoft={(msg, title) => {
+                    setPrefill({ message: msg, title })
+                    setActiveSessionId('temp_id')
+                  }} 
+                />
               </div>
             )}
           </div>

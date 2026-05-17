@@ -1,16 +1,33 @@
 import { NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
+import { createClient } from '@supabase/supabase-js'
 import OpenAI from 'openai'
+
+// Create a service client that bypasses RLS for backend operations
+const getServiceClient = () => {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
 
 export async function GET(req: Request) {
   const url = new URL(req.url)
   const session_id = url.searchParams.get('session_id')
   if (!session_id) return NextResponse.json({ messages: [] })
 
-  const supabase = createRouteHandlerClient({ cookies })
-  const { data, error } = await supabase.from('chat_messages').select('role, content').eq('session_id', session_id).order('created_at', { ascending: true })
-  if (error || !data) return NextResponse.json({ messages: [] })
+  const serviceSupabase = getServiceClient()
+  const { data, error } = await serviceSupabase
+    .from('chat_messages')
+    .select('role, content')
+    .eq('session_id', session_id)
+    .order('created_at', { ascending: true })
+
+  if (error || !data) {
+    console.error('[API] GET chat_messages error:', error)
+    return NextResponse.json({ messages: [] })
+  }
   
   return NextResponse.json({ messages: data })
 }
@@ -23,8 +40,10 @@ export async function POST(req: Request) {
 
     let { message, agency_id, session_id } = await req.json()
 
-    // Query agencies table to resolve the real agency ID where email matches auth user
-    const { data: agencyData, error: agencyErr } = await supabase
+    const serviceSupabase = getServiceClient()
+
+    // 1. Query agencies table using service role client to get the true agency ID
+    const { data: agencyData, error: agencyErr } = await serviceSupabase
       .from('agencies')
       .select('id')
       .eq('email', session.user.email)
@@ -36,30 +55,42 @@ export async function POST(req: Request) {
     }
 
     const realAgencyId = agencyData.id
-    console.log('[API] Resolved agency ID:', realAgencyId, 'for email:', session.user.email)
+    console.log('[API] Resolved agency ID:', realAgencyId, 'for user:', session.user.email)
 
+    // 2. Create Chat Session if not exists
     if (!session_id) {
       const title = message.substring(0, 40)
-      const { data: newSession, error: sErr } = await supabase.from('chat_sessions').insert({
-        agency_id: realAgencyId,
-        title
-      }).select('id').single()
+      const { data: newSession, error: sErr } = await serviceSupabase
+        .from('chat_sessions')
+        .insert({
+          agency_id: realAgencyId,
+          title
+        })
+        .select('id')
+        .single()
       
       if (!sErr && newSession) {
         session_id = newSession.id
+        console.log('[API] Created new chat session:', session_id)
       } else {
         console.error('[API] chat_sessions insert error:', sErr)
+        return NextResponse.json({ error: 'Failed to create session' }, { status: 500 })
       }
     }
 
+    // 3. Save User Message
     if (session_id) {
-      await supabase.from('chat_messages').insert({
-        session_id,
-        role: 'user',
-        content: message
-      })
+      const { error: msgErr } = await serviceSupabase
+        .from('chat_messages')
+        .insert({
+          session_id,
+          role: 'user',
+          content: message
+        })
+      if (msgErr) console.error('[API] Error saving user message:', msgErr)
     }
 
+    // 4. OpenAI Chat
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
     let reply = 'I cannot answer that right now.'
     
@@ -72,18 +103,25 @@ export async function POST(req: Request) {
         ]
       })
       reply = completion.choices[0]?.message?.content || reply
-    } catch(e) {}
+    } catch(e) {
+      console.error('[API] OpenAI completion error:', e)
+    }
 
+    // 5. Save LOFT Message
     if (session_id) {
-      await supabase.from('chat_messages').insert({
-        session_id,
-        role: 'loft',
-        content: reply
-      })
+      const { error: replyErr } = await serviceSupabase
+        .from('chat_messages')
+        .insert({
+          session_id,
+          role: 'loft',
+          content: reply
+        })
+      if (replyErr) console.error('[API] Error saving LOFT message:', replyErr)
     }
     
     return NextResponse.json({ reply, session_id })
-  } catch (error) {
-    return NextResponse.json({ error: 'Error' }, { status: 500 })
+  } catch (error: any) {
+    console.error('[API] POST exception:', error)
+    return NextResponse.json({ error: error.message || 'Error' }, { status: 500 })
   }
 }
