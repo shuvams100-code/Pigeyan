@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, Users, BarChart2, Settings, LogOut, ChevronLeft, ChevronRight, MessageSquare } from 'lucide-react'
+import { LayoutDashboard, Users, BarChart2, Settings, LogOut, ChevronLeft, ChevronRight, MessageSquare, Zap, CheckSquare } from 'lucide-react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useEffect, useState } from 'react'
 
@@ -16,6 +16,8 @@ export default function Sidebar({ userEmail, activeSessionId, onSelectSession, s
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Clients', href: '/clients', icon: Users },
     { name: 'Reports', href: '/reports', icon: BarChart2 },
+    { name: 'Signals', href: '/signals', icon: Zap },
+    { name: 'Actions', href: '/actions', icon: CheckSquare },
     { name: 'Settings', href: '/settings', icon: Settings },
   ]
 
@@ -71,7 +73,7 @@ export default function Sidebar({ userEmail, activeSessionId, onSelectSession, s
       </div>
 
       {/* Navigation Links */}
-      <nav className="px-4 space-y-2 mt-4">
+      <nav className={`${isCollapsed ? 'px-2' : 'px-4'} space-y-2 mt-4`}>
         {navItems.map((item) => {
           const isActive = pathname === item.href
           const Icon = item.icon
@@ -82,7 +84,11 @@ export default function Sidebar({ userEmail, activeSessionId, onSelectSession, s
                   backgroundColor: isActive ? '#2A2A2A' : 'transparent',
                   color: isActive ? '#F6FF80' : '#888888'
                 }}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${isCollapsed ? 'justify-center px-2' : ''}`}
+                className={`flex items-center rounded-lg transition-colors ${
+                  isCollapsed 
+                    ? 'justify-center w-10 h-10 mx-auto' 
+                    : 'gap-3 px-4 py-3'
+                }`}
               >
                 <Icon size={20} color={isActive ? '#F6FF80' : '#888888'} />
                 {!isCollapsed && <span className="font-medium">{item.name}</span>}
@@ -105,7 +111,7 @@ export default function Sidebar({ userEmail, activeSessionId, onSelectSession, s
       {/* Recent Chats Section */}
       {isCollapsed ? (
         <div className="relative group flex justify-center mt-6">
-          <div className="relative p-3 rounded-lg hover:bg-[#2A2A2A] transition-colors cursor-pointer">
+          <div className="relative p-2.5 rounded-lg hover:bg-[#2A2A2A] transition-colors cursor-pointer flex items-center justify-center w-10 h-10 mx-auto">
             <MessageSquare size={20} color="#888888" />
             {sessions.length > 0 && (
               <span className="absolute top-2 right-2 w-2 h-2 bg-[#F6FF80] rounded-full border border-[#1E1E1E]" />
@@ -150,14 +156,18 @@ export default function Sidebar({ userEmail, activeSessionId, onSelectSession, s
       {isCollapsed && <div className="flex-1" />}
 
       {/* Footer / Logout */}
-      <div className="p-4 mt-auto border-t border-[#333333]">
+      <div className={`${isCollapsed ? 'p-2' : 'p-4'} mt-auto border-t border-[#333333]`}>
         {!isCollapsed && userEmail && (
           <div className="text-[#888888] text-xs truncate mb-4 px-2">{userEmail}</div>
         )}
         <div className="relative group">
           <button 
             onClick={handleLogout}
-            className={`flex items-center gap-3 px-4 py-2 w-full text-[#888888] hover:text-white transition-colors rounded-lg hover:bg-[#2A2A2A] ${isCollapsed ? 'justify-center px-2' : ''}`}
+            className={`flex items-center text-[#888888] hover:text-white transition-colors rounded-lg hover:bg-[#2A2A2A] ${
+              isCollapsed 
+                ? 'justify-center w-10 h-10 mx-auto' 
+                : 'gap-3 px-4 py-2 w-full'
+            }`}
           >
             <LogOut size={20} color="#888888" />
             {!isCollapsed && <span>Log out</span>}

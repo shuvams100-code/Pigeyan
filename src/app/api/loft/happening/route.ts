@@ -26,25 +26,26 @@ export async function GET(req: Request) {
 
   const agencyId = agencyData.id
 
-  // 2. Fetch insights
+  // 2. Fetch insights (up to 1000 for pagination and full page lists)
   const { data: insights, error: insErr } = await serviceSupabase
     .from('portfolio_insights')
     .select('*')
     .eq('agency_id', agencyId)
     .is('dismissed_at', null)
     .order('created_at', { ascending: false })
-    .limit(10)
+    .limit(1000)
 
   if (insErr) {
     console.error('[API] Error loading portfolio_insights:', insErr)
   }
 
-  // 3. Fetch reminders
+  // 3. Fetch reminders (up to 1000)
   const { data: reminders, error: remErr } = await serviceSupabase
     .from('reminders')
-    .select('id, client_id, priority, message, due_at, type, status, clients(name)')
+    .select('id, client_id, priority, message, due_at, type, status, clients(name, company)')
     .eq('agency_id', agencyId)
     .eq('status', 'active')
+    .limit(1000)
 
   if (remErr) {
     console.error('[API] Error loading reminders:', remErr)

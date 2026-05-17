@@ -6,13 +6,32 @@ import Greeting from '@/components/dashboard/Greeting'
 import ChatInterface from '@/components/dashboard/ChatInterface'
 import WhatIsHappening from '@/components/dashboard/WhatIsHappening'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { useSearchParams } from 'next/navigation'
 
 export default function DashboardClient({ user }: { user: any }) {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [sessions, setSessions] = useState<any[]>([])
   const [agencyId, setAgencyId] = useState<string | null>(null)
   const [prefill, setPrefill] = useState<{ message: string; title: string } | null>(null)
+  const [insights, setInsights] = useState<any[]>([])
+  const [reminders, setReminders] = useState<any[]>([])
   const supabase = createClientComponentClient()
+  const searchParams = useSearchParams()
+
+  // Check URL query parameters for pre-filled signals transition
+  useEffect(() => {
+    const p = searchParams.get('prefill')
+    const t = searchParams.get('title')
+    const sid = searchParams.get('session_id')
+    if (p && t) {
+      setPrefill({ message: p, title: t })
+      setActiveSessionId('temp_id')
+      window.history.replaceState(null, '', '/dashboard')
+    } else if (sid) {
+      setActiveSessionId(sid)
+      window.history.replaceState(null, '', '/dashboard')
+    }
+  }, [searchParams])
 
   // Fetch real agency ID on mount
   useEffect(() => {
@@ -32,6 +51,17 @@ export default function DashboardClient({ user }: { user: any }) {
         if (data.sessions) setSessions(data.sessions)
       })
       .catch(err => console.error('Error loading sessions:', err))
+  }, [])
+
+  // Fetch happening data (insights and reminders) once at parent level
+  useEffect(() => {
+    fetch('/api/loft/happening')
+      .then(res => res.json())
+      .then(data => {
+        if (data.insights) setInsights(data.insights)
+        if (data.reminders) setReminders(data.reminders)
+      })
+      .catch(err => console.error('Error loading happening portfolio insights:', err))
   }, [])
 
   // Subscribe to Realtime changes for chat_sessions
@@ -105,6 +135,7 @@ export default function DashboardClient({ user }: { user: any }) {
                   })
               }}
               isExpanded={!!activeSessionId}
+              insights={insights}
             />
 
             {!activeSessionId && (
@@ -114,6 +145,8 @@ export default function DashboardClient({ user }: { user: any }) {
                     setPrefill({ message: msg, title })
                     setActiveSessionId('temp_id')
                   }} 
+                  insights={insights}
+                  reminders={reminders}
                 />
               </div>
             )}

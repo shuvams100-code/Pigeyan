@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { X } from 'lucide-react'
+import { X, MessageCircle } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 type Insight = {
   id: string
@@ -19,36 +20,42 @@ type Reminder = {
   due_at: string
   type: string
   status: string
-  clients?: { name: string } | null
+  clients?: { name: string; company?: string } | null
 }
 
 export default function WhatIsHappening({ 
-  onAskLoft 
+  onAskLoft,
+  insights: initialInsights,
+  reminders: initialReminders
 }: { 
   onAskLoft: (message: string, title: string) => void 
+  insights?: Insight[]
+  reminders?: Reminder[]
 }) {
   const [activeTab, setActiveTab] = useState<'signals' | 'actions'>('signals')
   const [activeSubTab, setActiveSubTab] = useState<'today' | 'older'>('today')
   const [insights, setInsights] = useState<Insight[]>([])
   const [reminders, setReminders] = useState<Reminder[]>([])
   const [loading, setLoading] = useState(true)
-
-  const fetchHappeningData = async () => {
-    try {
-      const res = await fetch('/api/loft/happening')
-      const data = await res.json()
-      if (data.insights) setInsights(data.insights)
-      if (data.reminders) setReminders(data.reminders)
-    } catch (err) {
-      console.error('Error fetching dashboard happening items:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const router = useRouter()
 
   useEffect(() => {
-    fetchHappeningData()
-  }, [])
+    if (initialInsights && initialReminders) {
+      setInsights(initialInsights)
+      setReminders(initialReminders)
+      setLoading(false)
+    } else {
+      // Fetch if not provided
+      fetch('/api/loft/happening')
+        .then(res => res.json())
+        .then(data => {
+          if (data.insights) setInsights(data.insights)
+          if (data.reminders) setReminders(data.reminders)
+        })
+        .catch(err => console.error('Error fetching dashboard happening items:', err))
+        .finally(() => setLoading(false))
+    }
+  }, [initialInsights, initialReminders])
 
   const handleDismissInsight = async (id: string) => {
     setInsights(prev => prev.filter(ins => ins.id !== id))
@@ -134,6 +141,11 @@ export default function WhatIsHappening({
     }
   }
 
+  // Slice at most 3 items on the dashboard
+  const visibleInsights = insights.slice(0, 3)
+  const allFilteredReminders = getFilteredReminders()
+  const visibleReminders = allFilteredReminders.slice(0, 3)
+
   return (
     <div className="w-full mt-8">
       {/* Header */}
@@ -177,50 +189,62 @@ export default function WhatIsHappening({
               your data to start seeing portfolio intelligence.
             </div>
           ) : (
-            insights.map(ins => {
-              const clientName = ins.affected_clients?.[0] || 'Unknown Client'
-              return (
-                <div 
-                  key={ins.id} 
-                  style={{ backgroundColor: '#2A2A2A' }} 
-                  className="rounded-[12px] p-4 flex items-center justify-between mb-2 shadow-sm transition-all hover:bg-[#313131]"
-                >
-                  {/* Left Side */}
-                  <div className="flex items-start gap-3 flex-1 min-w-0 pr-4">
-                    <div 
-                      className="w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0" 
-                      style={{ backgroundColor: getInsightColor(ins.insight_type) }} 
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-white font-bold text-[14px] truncate">{clientName}</div>
-                      <div className="text-[#888888] text-[12px] mt-0.5 break-words">
-                        {truncateString(ins.insight_content, 80)}
+            <>
+              {visibleInsights.map(ins => {
+                const clientName = ins.affected_clients?.[0] || 'Unknown Client'
+                return (
+                  <div 
+                    key={ins.id} 
+                    style={{ backgroundColor: '#2A2A2A' }} 
+                    className="rounded-[12px] p-4 flex items-center justify-between mb-2 shadow-sm transition-all hover:bg-[#313131]"
+                  >
+                    {/* Left Side */}
+                    <div className="flex items-start gap-3 flex-1 min-w-0 pr-4">
+                      <div 
+                        className="w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0" 
+                        style={{ backgroundColor: getInsightColor(ins.insight_type) }} 
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-white font-bold text-[14px] truncate">{clientName}</div>
+                        <div className="text-[#888888] text-[12px] mt-0.5 break-words">
+                          {truncateString(ins.insight_content, 80)}
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Right Side */}
-                  <div className="flex items-center gap-4 flex-shrink-0">
-                    <button
-                      onClick={() => {
-                        const messagePrompt = `Tell me more about this: ${ins.insight_content} regarding client ${clientName}. What should I do about this?`
-                        const sessionTitle = `Signal: ${ins.insight_content.substring(0, 30)}`
-                        onAskLoft(messagePrompt, sessionTitle)
-                      }}
-                      className="text-[#F6FF80] hover:text-[#000000] border border-[#F6FF80] hover:bg-[#F6FF80] font-bold text-[12px] rounded-[20px] px-3.5 py-1.5 transition-all focus:outline-none"
-                    >
-                      Ask LOFT →
-                    </button>
-                    <button
-                      onClick={() => handleDismissInsight(ins.id)}
-                      className="text-[#555555] hover:text-white transition-colors focus:outline-none"
-                    >
-                      <X size={16} />
-                    </button>
+                    {/* Right Side */}
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <button
+                        onClick={() => {
+                          const messagePrompt = `Tell me more about this: ${ins.insight_content} regarding client ${clientName}. What should I do about this?`
+                          const sessionTitle = `Signal: ${ins.insight_content.substring(0, 30)}`
+                          onAskLoft(messagePrompt, sessionTitle)
+                        }}
+                        className="text-[#888888] hover:text-[#F6FF80] transition-colors focus:outline-none"
+                      >
+                        <MessageCircle size={18} />
+                      </button>
+                      <button
+                        onClick={() => handleDismissInsight(ins.id)}
+                        className="text-[#888888] hover:text-[#F6FF80] transition-colors focus:outline-none"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
                   </div>
+                )
+              })}
+              {insights.length > 3 && (
+                <div className="pt-2 text-left">
+                  <button 
+                    onClick={() => router.push('/signals')}
+                    className="text-[#F6FF80] hover:underline text-[13px] font-medium bg-transparent border-none p-0 cursor-pointer focus:outline-none"
+                  >
+                    See more →
+                  </button>
                 </div>
-              )
-            })
+              )}
+            </>
           )
         ) : (
           /* ACTIONS TAB */
@@ -249,52 +273,64 @@ export default function WhatIsHappening({
               </button>
             </div>
 
-            {getFilteredReminders().length === 0 ? (
+            {allFilteredReminders.length === 0 ? (
               <div className="text-center py-10 text-[#555555] text-sm">
                 No action items. You're all caught up.
               </div>
             ) : (
-              getFilteredReminders().map(rem => (
-                <div 
-                  key={rem.id} 
-                  style={{ backgroundColor: '#2A2A2A' }} 
-                  className="rounded-[12px] p-4 flex items-center justify-between mb-2 shadow-sm transition-all hover:bg-[#313131]"
-                >
-                  {/* Left Side */}
-                  <div className="flex items-start gap-3 flex-1 min-w-0 pr-4">
-                    <div 
-                      className="w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0" 
-                      style={{ backgroundColor: getReminderPriorityColor(rem.priority) }} 
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-white font-bold text-[14px]">
-                          {rem.clients?.name || 'Unknown Client'}
-                        </span>
-                        <span className="bg-[#333333] text-[#888888] text-[9px] font-bold uppercase rounded px-1.5 py-0.5 tracking-wider">
-                          {rem.type.replace('_', ' ')}
-                        </span>
-                      </div>
-                      <div className="text-[#888888] text-[12px] mt-1 break-words">
-                        {rem.message}
+              <>
+                {visibleReminders.map(rem => (
+                  <div 
+                    key={rem.id} 
+                    style={{ backgroundColor: '#2A2A2A' }} 
+                    className="rounded-[12px] p-4 flex items-center justify-between mb-2 shadow-sm transition-all hover:bg-[#313131]"
+                  >
+                    {/* Left Side */}
+                    <div className="flex items-start gap-3 flex-1 min-w-0 pr-4">
+                      <div 
+                        className="w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0" 
+                        style={{ backgroundColor: getReminderPriorityColor(rem.priority) }} 
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-white font-bold text-[14px]">
+                            {rem.clients?.name || 'General'}
+                          </span>
+                          <span className="bg-[#333333] text-[#888888] text-[9px] font-bold uppercase rounded px-1.5 py-0.5 tracking-wider">
+                            {rem.type.replace('_', ' ')}
+                          </span>
+                        </div>
+                        <div className="text-[#888888] text-[12px] mt-1 break-words">
+                          {rem.message}
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Right Side */}
-                  <div className="flex items-center gap-4 flex-shrink-0">
-                    <span className="text-[#888888] text-[11px] font-medium">
-                      {formatDate(rem.due_at)}
-                    </span>
-                    <button
-                      onClick={() => handleDoneReminder(rem.id)}
-                      className="text-[#888888] hover:text-white hover:border-white text-xs px-3.5 py-1.5 border border-[#333333] bg-transparent rounded-[20px] transition-colors focus:outline-none"
+                    {/* Right Side */}
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <span className="text-[#888888] text-[11px] font-medium mr-1">
+                        {formatDate(rem.due_at)}
+                      </span>
+                      <button
+                        onClick={() => handleDoneReminder(rem.id)}
+                        className="text-[#888888] hover:text-white hover:border-white text-xs px-3.5 py-1.5 border border-[#333333] bg-transparent rounded-[20px] transition-colors focus:outline-none"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {allFilteredReminders.length > 3 && (
+                  <div className="pt-2 text-left">
+                    <button 
+                      onClick={() => router.push('/actions')}
+                      className="text-[#F6FF80] hover:underline text-[13px] font-medium bg-transparent border-none p-0 cursor-pointer focus:outline-none"
                     >
-                      Done
+                      See more →
                     </button>
                   </div>
-                </div>
-              ))
+                )}
+              </>
             )}
           </div>
         )}

@@ -1,5 +1,39 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import ReactMarkdown from 'react-markdown'
+
+function generateQuestionsFromInsights(insights: any[]) {
+  const base = [
+    "Ask LOFT anything...",
+    "How is my portfolio doing today?",
+    "Who needs my attention most right now?",
+    "Who should I follow up with today?",
+  ]
+  
+  if (!insights || insights.length === 0) 
+    return base
+  
+  const dynamic = insights.slice(0, 5).map(insight => {
+    const client = insight.affected_clients?.[0] 
+      || 'this client'
+    switch(insight.insight_type) {
+      case 'upsell_opportunity':
+        return `What should I do about the ${client} upsell opportunity?`
+      case 'at_risk':
+        return `How serious is the ${client} churn risk?`
+      case 'follow_up_needed':
+        return `What should I say to ${client} in my follow-up?`
+      case 'no_reply':
+        return `Why hasn't ${client} responded and what should I do?`
+      case 'positive_sentiment':
+        return `How can I capitalise on momentum with ${client}?`
+      default:
+        return `Tell me what's happening with ${client}`
+    }
+  })
+  
+  return [...base, ...dynamic]
+}
 
 export default function ChatInterface({ 
   agencyId, 
@@ -7,12 +41,46 @@ export default function ChatInterface({
   onSessionCreated, 
   isExpanded,
   prefill,
-  clearPrefill
+  clearPrefill,
+  insights = []
 }: any) {
   const [messages, setMessages] = useState<any[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  // Animated dynamic placeholders
+  const placeholders = useMemo(() => 
+    generateQuestionsFromInsights(insights), 
+    [insights]
+  )
+
+  const [placeholderIndex, setPlaceholderIndex] = useState(0)
+  const [visible, setVisible] = useState(true)
+
+  // Debug log placeholders array
+  useEffect(() => {
+    console.log('[ChatInterface] Placeholders generated:', placeholders)
+  }, [placeholders])
+
+  // Reset index when placeholders list changes
+  useEffect(() => {
+    setPlaceholderIndex(0)
+  }, [placeholders])
+
+  // Cycle placeholder index every 3000ms with smooth 400ms fade transition
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setVisible(false)
+      setTimeout(() => {
+        setPlaceholderIndex(prev => 
+          (prev + 1) % placeholders.length
+        )
+        setVisible(true)
+      }, 400)
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [placeholders])
 
   // Listen for prefill messages
   useEffect(() => {
@@ -98,24 +166,44 @@ export default function ChatInterface({
 
   if (!isExpanded) {
     return (
-      <form onSubmit={handleSubmit} className="relative w-full">
-        <input 
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask LOFT anything..."
-          style={{ backgroundColor: '#2A2A2A' }}
-          className="w-full border-none rounded-[50px] px-6 py-4 text-white placeholder-[#555555] focus:outline-none focus:ring-1 focus:ring-[#333333] pr-28"
-        />
-        <button 
-          type="submit"
-          disabled={isLoading || !input.trim()}
-          style={{ backgroundColor: '#F6FF80', color: '#000000' }}
-          className="absolute right-2 top-2 bottom-2 rounded-[40px] px-5 font-bold text-sm disabled:opacity-50 transition-opacity"
-        >
-          Ask
-        </button>
-      </form>
+      <div 
+        style={{ backgroundColor: '#2A2A2A' }}
+        className="relative w-full rounded-[50px] overflow-hidden"
+      >
+        {!input && (
+          <div
+            className="absolute left-6 top-1/2 -translate-y-1/2 pointer-events-none text-sm select-none z-10"
+            style={{
+              color: '#888888',
+              opacity: visible ? 1 : 0,
+              transition: 'opacity 400ms ease-in-out',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              maxWidth: 'calc(100% - 100px)'
+            }}
+          >
+            {placeholders[placeholderIndex]}
+          </div>
+        )}
+        <form onSubmit={handleSubmit} className="relative w-full">
+          <input 
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder=" "
+            style={{ backgroundColor: 'transparent' }}
+            className="w-full border-none px-6 py-4 text-white focus:outline-none pr-28 relative z-20"
+          />
+          <button 
+            type="submit"
+            disabled={isLoading || !input.trim()}
+            style={{ backgroundColor: '#F6FF80', color: '#000000' }}
+            className="absolute right-2 top-2 bottom-2 rounded-[40px] px-5 font-bold text-sm disabled:opacity-50 transition-opacity z-30"
+          >
+            Ask
+          </button>
+        </form>
+      </div>
     )
   }
 
@@ -134,9 +222,39 @@ export default function ChatInterface({
                 backgroundColor: m.role === 'user' ? '#F6FF80' : '#2A2A2A',
                 color: m.role === 'user' ? '#000000' : '#FFFFFF'
               }}
-              className="rounded-[16px] px-5 py-3 max-w-[70%] text-[15px] whitespace-pre-wrap leading-relaxed"
+              className="rounded-[16px] px-5 py-3 max-w-[70%] text-[15px] leading-relaxed"
             >
-              {m.content}
+              {m.role === 'user' ? (
+                <div className="whitespace-pre-wrap">{m.content}</div>
+              ) : (
+                <ReactMarkdown
+                  components={{
+                    p: ({children}) => (
+                      <p className="mb-2 last:mb-0">{children}</p>
+                    ),
+                    strong: ({children}) => (
+                      <strong className="font-bold text-white">
+                        {children}
+                      </strong>
+                    ),
+                    ul: ({children}) => (
+                      <ul className="list-disc list-inside mb-2 space-y-1">
+                        {children}
+                      </ul>
+                    ),
+                    ol: ({children}) => (
+                      <ol className="list-decimal list-inside mb-2 space-y-1">
+                        {children}
+                      </ol>
+                    ),
+                    li: ({children}) => (
+                      <li className="text-gray-300">{children}</li>
+                    ),
+                  }}
+                >
+                  {m.content}
+                </ReactMarkdown>
+              )}
             </div>
           </div>
         ))}
@@ -152,24 +270,44 @@ export default function ChatInterface({
       </div>
 
       <div className="pt-2 pb-6">
-        <form onSubmit={handleSubmit} className="relative w-full">
-          <input 
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask LOFT anything..."
-            style={{ backgroundColor: '#2A2A2A' }}
-            className="w-full border-none rounded-[50px] px-6 py-4 text-white placeholder-[#555555] focus:outline-none focus:ring-1 focus:ring-[#333333] pr-28"
-          />
-          <button 
-            type="submit"
-            disabled={isLoading || !input.trim()}
-            style={{ backgroundColor: '#F6FF80', color: '#000000' }}
-            className="absolute right-2 top-2 bottom-2 rounded-[40px] px-5 font-bold text-sm disabled:opacity-50 transition-opacity"
-          >
-            Ask
-          </button>
-        </form>
+        <div 
+          style={{ backgroundColor: '#2A2A2A' }}
+          className="relative w-full rounded-[50px] overflow-hidden"
+        >
+          {!input && (
+            <div
+              className="absolute left-6 top-1/2 -translate-y-1/2 pointer-events-none text-sm select-none z-10"
+              style={{
+                color: '#888888',
+                opacity: visible ? 1 : 0,
+                transition: 'opacity 400ms ease-in-out',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                maxWidth: 'calc(100% - 100px)'
+              }}
+            >
+              {placeholders[placeholderIndex]}
+            </div>
+          )}
+          <form onSubmit={handleSubmit} className="relative w-full">
+            <input 
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder=" "
+              style={{ backgroundColor: 'transparent' }}
+              className="w-full border-none px-6 py-4 text-white focus:outline-none pr-28 relative z-20"
+            />
+            <button 
+              type="submit"
+              disabled={isLoading || !input.trim()}
+              style={{ backgroundColor: '#F6FF80', color: '#000000' }}
+              className="absolute right-2 top-2 bottom-2 rounded-[40px] px-5 font-bold text-sm disabled:opacity-50 transition-opacity z-30"
+            >
+              Ask
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   )
