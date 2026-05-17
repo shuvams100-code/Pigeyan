@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 
-export default function Greeting({ user }: { user: any }) {
+export default function Greeting({ user, centered = false }: { user: any, centered?: boolean }) {
   const [greeting, setGreeting] = useState('Hello')
 
   useEffect(() => {
@@ -15,7 +15,7 @@ export default function Greeting({ user }: { user: any }) {
   const firstName = user?.user_metadata?.first_name || 'there'
 
   return (
-    <div>
+    <div className={centered ? "text-center" : ""}>
       <h1 className="text-white text-[32px] font-bold">
         {greeting}, {firstName}.
       </h1>

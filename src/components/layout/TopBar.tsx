@@ -1,11 +1,10 @@
 'use client'
-import { Bell } from 'lucide-react'
+import { Bell, Home } from 'lucide-react'
 import { usePathname } from 'next/navigation'
 
-export default function TopBar() {
+export default function TopBar({ onHome, showHome, sessionTitle }: { onHome?: () => void, showHome?: boolean, sessionTitle?: string }) {
   const pathname = usePathname()
   
-  // Format: "Monday, 19 May 2026"
   const today = new Date()
   const dateString = today.toLocaleDateString('en-GB', {
     weekday: 'long',
@@ -14,16 +13,27 @@ export default function TopBar() {
     year: 'numeric'
   })
 
-  // get title from path
   let title = 'Dashboard'
   if (pathname === '/clients') title = 'Clients'
   if (pathname === '/reports') title = 'Reports'
   if (pathname === '/settings') title = 'Settings'
 
+  let displayTitle = title
+  if (sessionTitle) {
+    displayTitle = sessionTitle.length > 35 ? sessionTitle.substring(0, 35) + '...' : sessionTitle
+  }
+
   return (
     <div style={{ height: 64, backgroundColor: '#1E1E1E' }} className="flex items-center justify-between px-8 flex-shrink-0">
-      <h2 className="text-white font-bold text-[18px]">{title}</h2>
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-4">
+        {showHome && (
+          <button onClick={onHome} className="text-[#888888] hover:text-white transition-colors p-2 rounded hover:bg-[#2A2A2A]">
+            <Home size={20} />
+          </button>
+        )}
+        <h2 className="text-white font-bold text-[18px]">{displayTitle}</h2>
+      </div>
+      <div className="flex-1 flex justify-end items-center gap-6">
         <span className="text-[#888888] text-sm">{dateString}</span>
         <button className="text-[#888888] hover:text-white transition-colors">
           <Bell size={20} />

@@ -1,10 +1,27 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
-export default function ChatInterface({ agencyId }: { agencyId: string }) {
-  const [messages, setMessages] = useState<{role: 'user'|'loft', content: string}[]>([])
+export default function ChatInterface({ agencyId, activeSessionId, onSessionCreated, isExpanded }: any) {
+  const [messages, setMessages] = useState<any[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const bottomRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (activeSessionId && activeSessionId !== 'temp_id') {
+      fetch(`/api/loft/chat?session_id=${activeSessionId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.messages) setMessages(data.messages)
+        })
+    } else if (!activeSessionId) {
+      setMessages([])
+    }
+  }, [activeSessionId])
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, isLoading])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -14,17 +31,23 @@ export default function ChatInterface({ agencyId }: { agencyId: string }) {
     setInput('')
     setIsLoading(true)
 
+    if (!activeSessionId) {
+      onSessionCreated('temp_id')
+    }
+
     try {
       const res = await fetch('/api/loft/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMsg, agency_id: agencyId })
+        body: JSON.stringify({ message: userMsg, agency_id: agencyId, session_id: activeSessionId === 'temp_id' ? null : activeSessionId })
       })
       const data = await res.json()
+      
+      if (data.session_id && (!activeSessionId || activeSessionId === 'temp_id')) {
+        onSessionCreated(data.session_id)
+      }
       if (data.reply) {
         setMessages(prev => [...prev, { role: 'loft', content: data.reply }])
-      } else {
-        throw new Error(data.error || 'Unknown error')
       }
     } catch (err) {
       setMessages(prev => [...prev, { role: 'loft', content: 'Sorry, I encountered an error. Please try again.' }])
@@ -33,59 +56,81 @@ export default function ChatInterface({ agencyId }: { agencyId: string }) {
     }
   }
 
-  return (
-    <div style={{ backgroundColor: '#2A2A2A' }} className="rounded-[16px] p-5 flex flex-col mt-6">
-      <div style={{ color: '#888888', letterSpacing: '1px' }} className="text-[11px] uppercase font-bold mb-4">
-        Ask LOFT Anything
-      </div>
-      
-      <div className="flex-1 overflow-y-auto mb-4 space-y-4" style={{ minHeight: 120, maxHeight: 280 }}>
-        {messages.length === 0 ? (
-          <div className="h-[120px] flex items-center justify-center">
-            <p style={{ color: '#555555' }} className="text-center text-sm">
-              Ask me about any client, portfolio health,<br/>or what needs attention today.
-            </p>
-          </div>
-        ) : (
-          messages.map((m, i) => (
-            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              {m.role === 'loft' && (
-                <div style={{ backgroundColor: '#F6FF80', color: '#000000' }} className="w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs mr-3 flex-shrink-0 mt-1">
-                  L
-                </div>
-              )}
-              <div 
-                style={{ 
-                  backgroundColor: m.role === 'user' ? '#F6FF80' : '#333333',
-                  color: m.role === 'user' ? '#000000' : '#FFFFFF'
-                }}
-                className="rounded-[12px] px-4 py-2.5 max-w-[80%] text-sm whitespace-pre-wrap"
-              >
-                {m.content}
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-
-      <form onSubmit={handleSubmit} className="flex gap-3">
+  if (!isExpanded) {
+    return (
+      <form onSubmit={handleSubmit} className="relative w-full">
         <input 
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask anything about your clients..."
-          style={{ backgroundColor: '#1E1E1E', borderColor: '#333333' }}
-          className="flex-1 border rounded-[12px] px-4 py-2.5 text-white placeholder-[#555555] focus:outline-none focus:border-[#F6FF80]"
+          placeholder="Ask LOFT anything..."
+          style={{ backgroundColor: '#2A2A2A' }}
+          className="w-full border-none rounded-[50px] px-6 py-4 text-white placeholder-[#555555] focus:outline-none focus:ring-1 focus:ring-[#333333] pr-28"
         />
         <button 
           type="submit"
-          disabled={isLoading}
+          disabled={isLoading || !input.trim()}
           style={{ backgroundColor: '#F6FF80', color: '#000000' }}
-          className="rounded-[8px] px-5 py-2.5 font-bold text-sm disabled:opacity-50"
+          className="absolute right-2 top-2 bottom-2 rounded-[40px] px-5 font-bold text-sm disabled:opacity-50 transition-opacity"
         >
-          {isLoading ? '...' : 'Ask'}
+          Ask
         </button>
       </form>
+    )
+  }
+
+  return (
+    <div className="flex flex-col h-full w-full max-w-4xl mx-auto">
+      <div className="flex-1 overflow-y-auto space-y-6 pt-4 pb-8 pr-2">
+        {messages.map((m, i) => (
+          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            {m.role === 'loft' && (
+              <div style={{ backgroundColor: '#F6FF80', color: '#000000' }} className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm mr-4 flex-shrink-0 mt-1">
+                L
+              </div>
+            )}
+            <div 
+              style={{ 
+                backgroundColor: m.role === 'user' ? '#F6FF80' : '#2A2A2A',
+                color: m.role === 'user' ? '#000000' : '#FFFFFF'
+              }}
+              className="rounded-[16px] px-5 py-3 max-w-[70%] text-[15px] whitespace-pre-wrap leading-relaxed"
+            >
+              {m.content}
+            </div>
+          </div>
+        ))}
+        {isLoading && (
+           <div className="flex justify-start">
+             <div style={{ backgroundColor: '#F6FF80', color: '#000000' }} className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm mr-4 flex-shrink-0 mt-1">
+               L
+             </div>
+             <div style={{ backgroundColor: '#2A2A2A' }} className="rounded-[16px] px-5 py-3 text-white">...</div>
+           </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      <div className="pt-2 pb-6">
+        <form onSubmit={handleSubmit} className="relative w-full">
+          <input 
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Ask LOFT anything..."
+            style={{ backgroundColor: '#2A2A2A' }}
+            className="w-full border-none rounded-[50px] px-6 py-4 text-white placeholder-[#555555] focus:outline-none focus:ring-1 focus:ring-[#333333] pr-28"
+          />
+          <button 
+            type="submit"
+            disabled={isLoading || !input.trim()}
+            style={{ backgroundColor: '#F6FF80', color: '#000000' }}
+            className="absolute right-2 top-2 bottom-2 rounded-[40px] px-5 font-bold text-sm disabled:opacity-50 transition-opacity"
+          >
+            Ask
+          </button>
+        </form>
+      </div>
     </div>
   )
 }
