@@ -19,7 +19,7 @@ git push origin main
 
 echo.
 echo Sync complete. Waiting for 30 minutes before next sync...
-:: Wait for 1800 seconds (30 minutes)
-timeout /t 1800 /nobreak
+:: Wait for 1800 seconds (30 minutes) using ping (works in all environments)
+ping 127.0.0.1 -n 1801 > nul
 
 goto loop
