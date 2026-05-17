@@ -1,22 +1,22 @@
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
-import './globals.css';
+import { Inter } from 'next/font/google'
 
-const inter = Inter({ subsets: ['latin'] });
+const inter = Inter({ subsets: ['latin'] })
 
-export const metadata: Metadata = {
+export const metadata = {
   title: 'Pigeyan',
-  description: 'AI-Powered Client Intelligence Platform',
-};
+  description: 'Client Intelligence Platform',
+}
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: React.ReactNode
 }) {
   return (
     <html lang="en">
-      <body className={`${inter.className} text-[#1E293B]`}>{children}</body>
+      <body className={inter.className} style={{ backgroundColor: '#1E1E1E', margin: 0, padding: 0 }}>
+        {children}
+      </body>
     </html>
-  );
+  )
 }
